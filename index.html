@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mini Notion - GitHub</title>
+    <style>
+        body {
+            display: flex;
+            font-family: Arial, sans-serif;
+        }
+        #sidebar {
+            width: 250px;
+            background: #f4f4f4;
+            padding: 10px;
+            height: 100vh;
+        }
+        #editor {
+            flex: 1;
+            padding: 20px;
+        }
+        button {
+            display: block;
+            margin: 5px 0;
+            padding: 10px;
+            width: 100%;
+        }
+        textarea {
+            width: 100%;
+            height: 80vh;
+        }
+    </style>
+</head>
+<body>
+    <div id="sidebar">
+        <h3>Páginas</h3>
+        <button onclick="novaPagina()">+ Nova Página</button>
+        <ul id="listaPaginas"></ul>
+    </div>
+    <div id="editor">
+        <h2 id="tituloPagina">Nova Página</h2>
+        <textarea id="conteudo"></textarea>
+        <button onclick="salvarPagina()">Salvar</button>
+    </div>
+
+    <script>
+        const username = "SEU_GITHUB"; // Seu usuário no GitHub
+        const repo = "SEU_REPOSITORIO"; // Nome do repositório no GitHub
+        const token = "SEU_TOKEN"; // Seu GitHub Token (NÃO COLOQUE EM PRODUÇÃO)
+        let paginas = {};
+
+        async function buscarArquivos() {
+            const url = `https://api.github.com/repos/${username}/${repo}/contents/paginas`;
+            const resposta = await fetch(url, {
+                headers: { "Authorization": `token ${token}` }
+            });
+            if (resposta.ok) {
+                const arquivos = await resposta.json();
+                arquivos.forEach(arquivo => {
+                    const nome = arquivo.name.replace(".md", "");
+                    paginas[nome] = arquivo.path;
+                });
+                atualizarLista();
+            }
+        }
+
+        function atualizarLista() {
+            let lista = document.getElementById("listaPaginas");
+            lista.innerHTML = "";
+            Object.keys(paginas).forEach(titulo => {
+                let item = document.createElement("li");
+                item.innerHTML = `<a href="#" onclick="abrirPagina('${titulo}')">${titulo}</a>`;
+                lista.appendChild(item);
+            });
+        }
+
+        async function novaPagina() {
+            let titulo = prompt("Nome da página:");
+            if (titulo && !paginas[titulo]) {
+                paginas[titulo] = `paginas/${titulo}.md`;
+                await salvarPagina();
+                atualizarLista();
+                abrirPagina(titulo);
+            }
+        }
+
+        async function abrirPagina(titulo) {
+            document.getElementById("tituloPagina").innerText = titulo;
+            const url = `https://raw.githubusercontent.com/${username}/${repo}/main/${paginas[titulo]}`;
+            const resposta = await fetch(url);
+            document.getElementById("conteudo").value = resposta.ok ? await resposta.text() : "";
+        }
+
+        async function salvarPagina() {
+            let titulo = document.getElementById("tituloPagina").innerText;
+            let conteudo = document.getElementById("conteudo").value;
+            let path = paginas[titulo];
+
+            // Buscar SHA do arquivo (necessário para atualização)
+            let sha = "";
+            const fileUrl = `https://api.github.com/repos/${username}/${repo}/contents/${path}`;
+            const fileResponse = await fetch(fileUrl, {
+                headers: { "Authorization": `token ${token}` }
+            });
+
+            if (fileResponse.ok) {
+                const fileData = await fileResponse.json();
+                sha = fileData.sha;
+            }
+
+            // Criar ou atualizar o arquivo no GitHub
+            const commitData = {
+                message: `Atualizando página ${titulo}`,
+                content: btoa(unescape(encodeURIComponent(conteudo))),
+                sha
+            };
+
+            const resposta = await fetch(fileUrl, {
+                method: "PUT",
+                headers: {
+                    "Authorization": `token ${token}`,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(commitData)
+            });
+
+            if (resposta.ok) {
+                alert("Página salva no GitHub!");
+            } else {
+                alert("Erro ao salvar no GitHub!");
+            }
+        }
+
+        buscarArquivos();
+    </script>
+</body>
+</html>
